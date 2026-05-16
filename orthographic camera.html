@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three.js - Orthographic Camera</title>
+    <style>
+        html, body { margin: 0; height: 100%; overflow: hidden; background-color: #000; }
+        #threejs-container { width: 100%; height: 100%; display: block; }
+        .split { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; }
+        .split > div { flex: 1; height: 100%; outline: none; }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <canvas id="threejs-container"></canvas>
+    <div class="split">
+        <div id="view1" tabindex="1"></div>
+        <div id="view2" tabindex="2"></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+        function main() {
+            const canvas = document.querySelector('#threejs-container');
+            const view1Elem = document.querySelector('#view1');
+            const view2Elem = document.querySelector('#view2');
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x262626);
+
+            // 1. Orthographic Camera Parameters
+            const left = -1;
+            const right = 1;
+            const top = 1;
+            const bottom = -1;
+            const near = 5;
+            const far = 50;
+            const camera = new THREE.OrthographicCamera(left, right, top, bottom, near, far);
+            camera.position.set(0, 10, 20);
+            camera.zoom = 0.2; // Zoom is used instead of FOV
+
+            const cameraHelper = new THREE.CameraHelper(camera);
+            scene.add(cameraHelper);
+
+            // Observer Camera
+            const camera2 = new THREE.PerspectiveCamera(60, 2, 0.1, 500);
+            camera2.position.set(40, 10, 30);
+            camera2.lookAt(0, 5, 0);
+
+            const controls = new OrbitControls(camera, view1Elem);
+            const controls2 = new OrbitControls(camera2, view2Elem);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 7);
+            scene.add(light, new THREE.AmbientLight(0xffffff, 0.4));
+
+            // World Objects
+            const plane = new THREE.Mesh(
+                new THREE.PlaneGeometry(40, 40),
+                new THREE.MeshLambertMaterial({ color: 0x444444, side: THREE.DoubleSide })
+            );
+            plane.rotation.x = -Math.PI / 2;
+            scene.add(plane);
+
+            const cube = new THREE.Mesh(
+                new THREE.BoxGeometry(4, 4, 4),
+                new THREE.MeshLambertMaterial({ color: 0x87ceeb })
+            );
+            cube.position.set(5, 2, 0);
+            scene.add(cube);
+
+            // GUI setup for Orthographic Properties
+            const gui = new GUI();
+            gui.add(camera, 'zoom', 0.01, 1, 0.01).onChange(() => camera.updateProjectionMatrix());
+            gui.add(camera, 'near', 0.1, 50).onChange(() => camera.updateProjectionMatrix());
+            gui.add(camera, 'far', 10, 200).onChange(() => camera.updateProjectionMatrix());
+
+            function setScissorForElement(elem) {
+                const rect = elem.getBoundingClientRect();
+                const canvasRect = canvas.getBoundingClientRect();
+                const width = rect.width;
+                const height = rect.height;
+                const left = rect.left - canvasRect.left;
+                const bottom = canvasRect.height - (rect.top - canvasRect.top + height);
+
+                renderer.setScissor(left, bottom, width, height);
+                renderer.setViewport(left, bottom, width, height);
+
+                return width / height;
+            }
+
+            function render() {
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                if (canvas.width !== width || canvas.height !== height) {
+                    renderer.setSize(width, height, false);
+                }
+
+                renderer.setScissorTest(true);
+
+                // Update View 1 (Orthographic)
+                const aspect = setScissorForElement(view1Elem);
+                camera.left = -aspect;
+                camera.right = aspect;
+                camera.updateProjectionMatrix();
+                cameraHelper.visible = false;
+                renderer.render(scene, camera);
+
+                // Update View 2 (Observer Perspective)[cite: 1]
+                setScissorForElement(view2Elem);
+                cameraHelper.update();
+                cameraHelper.visible = true;
+                renderer.render(scene, camera2);
+
+                requestAnimationFrame(render);
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        main();
+    </script>
+</body>
+</html>
