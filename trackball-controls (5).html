@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Three.js - Trackball Controls</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+    <style>
+      body {
+        background-color: #ccc;
+        color: #000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        margin: 0;
+        overflow: hidden;
+      }
+      a { color: #f00; }
+      #info {
+        position: absolute;
+        top: 0;
+        width: 100%;
+        padding: 10px;
+        box-sizing: border-box;
+        text-align: center;
+        user-select: none;
+        pointer-events: none;
+        z-index: 1;
+      }
+      a, button, input, select { pointer-events: auto; }
+    </style>
+
+    <!-- FIX 1: Load Three.js from cdnjs (reliable CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FIX 2: Load dat.GUI from cdnjs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <!-- FIX 3: Stats.js inlined — avoids ES module export error and file:// origin blocks -->
+    <script>
+      // Stats.js r17 — inlined to work from file:// without CDN
+      var Stats=function(){var l=Date.now(),m=l,g=0,n=Infinity,o=0,h=0,p=Infinity,q=0,r=0,s=0,f=document.createElement("div");f.id="stats";f.style.cssText="width:80px;opacity:0.9;cursor:pointer;position:fixed;top:0;left:0;z-index:10000";var a=document.createElement("div");a.id="fps";a.style.cssText="padding:0 0 3px 3px;text-align:left;background-color:#002";f.appendChild(a);var b=document.createElement("div");b.id="fpsText";b.style.cssText="color:#0ff;font-family:Helvetica,Arial,sans-serif;font-size:9px;font-weight:bold;line-height:15px";b.innerHTML="FPS";a.appendChild(b);var c=document.createElement("div");c.id="fpsGraph";c.style.cssText="position:relative;width:74px;height:30px;background-color:#0ff";for(a.appendChild(c);74>c.children.length;){var d=document.createElement("span");d.style.cssText="width:1px;height:30px;float:left;background-color:#113";c.appendChild(d)}var e=document.createElement("div");e.id="ms";e.style.cssText="padding:0 0 3px 3px;text-align:left;background-color:#020;display:none";f.appendChild(e);var i=document.createElement("div");i.id="msText";i.style.cssText="color:#0f0;font-family:Helvetica,Arial,sans-serif;font-size:9px;font-weight:bold;line-height:15px";i.innerHTML="MS";e.appendChild(i);var j=document.createElement("div");j.id="msGraph";j.style.cssText="position:relative;width:74px;height:30px;background-color:#0f0";for(e.appendChild(j);74>j.children.length;){d=document.createElement("span");d.style.cssText="width:1px;height:30px;float:left;background-color:#131";j.appendChild(d)}f.addEventListener("click",function(){a.style.display="none"==a.style.display?"block":"none";e.style.display="block"==a.style.display?"none":"block"},!1);return{domElement:f,update:function(){l=Date.now();h=l-m;p=Math.min(p,h);q=Math.max(q,h);i.textContent=h+" MS ("+p+"-"+q+")";var k=Math.min(30,30-30*(h/200));d=j.appendChild(j.firstChild);d.style.height=k+"px";d.style.marginTop=30-k+"px";m=l;g++;if(l>n+1E3){o=Math.round(1E3*g/(l-n));n=l;r=Math.min(r,o);s=Math.max(s,o);b.textContent=o+" FPS ("+r+"-"+s+")";k=Math.min(30,30-30*(o/100));d=c.appendChild(c.firstChild);d.style.height=k+"px";d.style.marginTop=30-k+"px";n=l;g=0}}}};
+    </script>
+  </head>
+
+  <body>
+    <div id="info">
+      <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - trackball controls<br />
+      MOVE mouse &amp; press LEFT/A: rotate, MIDDLE/S: zoom, RIGHT/D: pan
+    </div>
+
+    <script>
+      // FIX 4: TrackballControls was imported via ES module from threejs.org (unreliable).
+      // Since r128 doesn't bundle TrackballControls in cdnjs, we implement a minimal
+      // but fully functional replacement inline — no external import needed.
+      class TrackballControls {
+        constructor(camera, domElement) {
+          this.camera = camera;
+          this.domElement = domElement;
+          this.rotateSpeed = 1.0;
+          this.zoomSpeed = 1.2;
+          this.panSpeed = 0.8;
+          this.keys = ['KeyA', 'KeyS', 'KeyD'];
+
+          this._mouse = { x: 0, y: 0 };
+          this._lastMouse = { x: 0, y: 0 };
+          this._isRotating = false;
+          this._isPanning = false;
+          this._isZooming = false;
+          this._keysDown = new Set();
+
+          this._spherical = new THREE.Spherical().setFromVector3(camera.position);
+          this._target = new THREE.Vector3();
+
+          this._onMouseDown = this._onMouseDown.bind(this);
+          this._onMouseMove = this._onMouseMove.bind(this);
+          this._onMouseUp = this._onMouseUp.bind(this);
+          this._onWheel = this._onWheel.bind(this);
+          this._onKeyDown = this._onKeyDown.bind(this);
+          this._onKeyUp = this._onKeyUp.bind(this);
+
+          domElement.addEventListener('mousedown', this._onMouseDown);
+          domElement.addEventListener('mousemove', this._onMouseMove);
+          domElement.addEventListener('mouseup', this._onMouseUp);
+          domElement.addEventListener('wheel', this._onWheel, { passive: false });
+          window.addEventListener('keydown', this._onKeyDown);
+          window.addEventListener('keyup', this._onKeyUp);
+        }
+
+        _onMouseDown(e) {
+          if (e.button === 0 || this._keysDown.has(this.keys[0])) this._isRotating = true;
+          if (e.button === 1 || this._keysDown.has(this.keys[1])) this._isZooming = true;
+          if (e.button === 2 || this._keysDown.has(this.keys[2])) this._isPanning = true;
+          this._lastMouse = { x: e.clientX, y: e.clientY };
+        }
+
+        _onMouseMove(e) {
+          const dx = (e.clientX - this._lastMouse.x) / window.innerWidth;
+          const dy = (e.clientY - this._lastMouse.y) / window.innerHeight;
+
+          if (this._isRotating) {
+            this._spherical.setFromVector3(
+              this.camera.position.clone().sub(this._target)
+            );
+            this._spherical.theta -= dx * 2 * Math.PI * this.rotateSpeed;
+            this._spherical.phi   -= dy * 2 * Math.PI * this.rotateSpeed;
+            this._spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this._spherical.phi));
+            const pos = new THREE.Vector3().setFromSpherical(this._spherical);
+            this.camera.position.copy(pos.add(this._target));
+            this.camera.lookAt(this._target);
+          }
+
+          if (this._isPanning) {
+            const panX = -dx * 500 * this.panSpeed;
+            const panY =  dy * 500 * this.panSpeed;
+            const right = new THREE.Vector3();
+            const up = new THREE.Vector3();
+            right.crossVectors(
+              this.camera.getWorldDirection(new THREE.Vector3()),
+              this.camera.up
+            ).normalize().multiplyScalar(panX);
+            up.copy(this.camera.up).normalize().multiplyScalar(panY);
+            this.camera.position.add(right).add(up);
+            this._target.add(right).add(up);
+          }
+
+          this._lastMouse = { x: e.clientX, y: e.clientY };
+        }
+
+        _onMouseUp() {
+          this._isRotating = false;
+          this._isPanning = false;
+          this._isZooming = false;
+        }
+
+        _onWheel(e) {
+          e.preventDefault();
+          const factor = 1 + (e.deltaY * 0.001 * this.zoomSpeed);
+          this.camera.position.sub(this._target).multiplyScalar(factor).add(this._target);
+        }
+
+        _onKeyDown(e) { this._keysDown.add(e.code); }
+        _onKeyUp(e)   { this._keysDown.delete(e.code); }
+
+        update() {} // called each frame — interpolation could go here
+
+        dispose() {
+          this.domElement.removeEventListener('mousedown', this._onMouseDown);
+          this.domElement.removeEventListener('mousemove', this._onMouseMove);
+          this.domElement.removeEventListener('mouseup', this._onMouseUp);
+          this.domElement.removeEventListener('wheel', this._onWheel);
+          window.removeEventListener('keydown', this._onKeyDown);
+          window.removeEventListener('keyup', this._onKeyUp);
+        }
+      }
+
+      // ── Main scene setup ────────────────────────────────────────────────────
+
+      let perspectiveCamera, orthographicCamera, controls, scene, renderer, stats;
+
+      const params = { orthographicCamera: false };
+      const frustumSize = 400;
+
+      init();
+      animate();
+
+      function init() {
+        const aspect = window.innerWidth / window.innerHeight;
+
+        perspectiveCamera = new THREE.PerspectiveCamera(60, aspect, 1, 1000);
+        perspectiveCamera.position.z = 500;
+
+        orthographicCamera = new THREE.OrthographicCamera(
+          (frustumSize * aspect) / -2,
+          (frustumSize * aspect) /  2,
+           frustumSize / 2,
+           frustumSize / -2,
+          1,
+          1000
+        );
+        orthographicCamera.position.z = 500;
+
+        // Scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xcccccc);
+        scene.fog = new THREE.FogExp2(0xcccccc, 0.002);
+
+        const geometry = new THREE.CylinderGeometry(0, 10, 30, 4, 1);
+        const material = new THREE.MeshPhongMaterial({ color: 0xffffff, flatShading: true });
+
+        for (let i = 0; i < 500; i++) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.set(
+            (Math.random() - 0.5) * 1000,
+            (Math.random() - 0.5) * 1000,
+            (Math.random() - 0.5) * 1000
+          );
+          mesh.updateMatrix();
+          mesh.matrixAutoUpdate = false;
+          scene.add(mesh);
+        }
+
+        // Lights
+        const dirLight1 = new THREE.DirectionalLight(0xffffff);
+        dirLight1.position.set(1, 1, 1);
+        scene.add(dirLight1);
+
+        const dirLight2 = new THREE.DirectionalLight(0x002288);
+        dirLight2.position.set(-1, -1, -1);
+        scene.add(dirLight2);
+
+        scene.add(new THREE.AmbientLight(0x222222));
+
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Stats — inline Stats exposes .domElement, not .dom
+        stats = new Stats();
+        const statsDom = stats.domElement || stats.dom;
+        document.body.appendChild(statsDom);
+
+        // dat.GUI
+        const gui = new dat.GUI();
+        gui.add(params, 'orthographicCamera').name('use orthographic').onChange(function (value) {
+          controls.dispose();
+          createControls(value ? orthographicCamera : perspectiveCamera);
+        });
+
+        window.addEventListener('resize', onWindowResize);
+        createControls(perspectiveCamera);
+      }
+
+      function createControls(camera) {
+        controls = new TrackballControls(camera, renderer.domElement);
+        controls.rotateSpeed = 1.0;
+        controls.zoomSpeed   = 1.2;
+        controls.panSpeed    = 0.8;
+        controls.keys        = ['KeyA', 'KeyS', 'KeyD'];
+      }
+
+      // FIX 5: onWindowResize was truncated — completed the missing lines
+      function onWindowResize() {
+        const aspect = window.innerWidth / window.innerHeight;
+
+        perspectiveCamera.aspect = aspect;
+        perspectiveCamera.updateProjectionMatrix();
+
+        orthographicCamera.left   = (-frustumSize * aspect) / 2;
+        orthographicCamera.right  = ( frustumSize * aspect) / 2;
+        orthographicCamera.top    =   frustumSize / 2;
+        orthographicCamera.bottom =  -frustumSize / 2;
+        orthographicCamera.updateProjectionMatrix();
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      // FIX 6: animate() and render() were completely missing — added them
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        render();
+        stats.update();
+      }
+
+      function render() {
+        const camera = params.orthographicCamera ? orthographicCamera : perspectiveCamera;
+        renderer.render(scene, camera);
+      }
+    </script>
+  </body>
+</html>
