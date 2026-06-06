@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three.js - AmbientLight</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -applesystem, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+                Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        html,
+        body,
+        #container {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #container {
+            position: relative;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/datgui/0.7.7/dat.gui.min.js"></script>
+
+</head>
+
+<body>
+    <div id="container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+    <script type="module">
+        // Adding Ambient to the scene
+        // without this light you cannot see the color of the cube
+        // GUI
+        const gui = new dat.GUI()
+        // sizes
+        let width = window.innerWidth
+        let height = window.innerHeight
+        // scene
+        const scene = new THREE.Scene()
+        scene.background = new THREE.Color(0x262626)
+        // camera
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100)
+        camera.position.set(0, 0, 10)
+        // lights
+        const light = new THREE.AmbientLight(0xffffff, 1)
+        scene.add(light)
+        // light controls
+        const lightColor = {
+            color: light.color.getHex()
+        }
+        const lightFolder = gui.addFolder('Ambient Light')
+        lightFolder.addColor(lightColor, 'color').onChange(() => {
+            light.color.set(lightColor.color)
+        })
+        lightFolder.add(light, 'intensity', 0, 1, 0.01)
+        lightFolder.open()
+        // cube
+        const geometry = new THREE.BoxGeometry(2, 2, 2)
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            wireframe: true
+        })
+        const materialFolder = gui.addFolder('Material')
+        materialFolder.add(material, 'wireframe')
+        materialFolder.open()
+        const cube = new THREE.Mesh(geometry, material)
+        scene.add(cube)
+        // responsiveness
+        window.addEventListener('resize', () => {
+            width = window.innerWidth
+            height = window.innerHeight
+            camera.aspect = width / height
+            camera.updateProjectionMatrix()
+            renderer.setSize(window.innerWidth, window.innerHeight)
+            renderer.render(scene, camera)
+        })
+        // renderer
+        const renderer = new THREE.WebGL1Renderer()
+        renderer.setSize(width, height)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        // animation
+        function animate() {
+            requestAnimationFrame(animate)
+            cube.rotation.x += 0.005
+            cube.rotation.y += 0.01
+            renderer.render(scene, camera)
+        }
+        // rendering the scene
+        const container = document.querySelector('#container')
+        container.append(renderer.domElement)
+        renderer.render(scene, camera)
+        animate()
+    </script>
+</body>
+
+</html>
